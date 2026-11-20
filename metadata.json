@@ -1,0 +1,6 @@
+{
+  "name": "GT Service",
+  "description": "GT Service food, grocery, medical & parcel delivery platform for Pakistan (PKR) backed by Cloud Firestore.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
