@@ -2124,6 +2124,24 @@ private fun AdminCommissionsSection(adminVm: AdminViewModel) {
         item { OutlinedTextField(value = baseFee, onValueChange = { baseFee = it }, label = { Text("Base Delivery Fee (PKR)") }, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(value = riderPayout, onValueChange = { riderPayout = it }, label = { Text("Rider Payout per Order (PKR)") }, modifier = Modifier.fillMaxWidth()) }
         item {
+            Surface(
+                color = GharTakEmerald.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (settings.radiusPricingEnabled) {
+                        "Note: City Radius Pricing is ON (0–${settings.deliveryBaseRadiusKm.toInt()} km = ${GharTakConstants.formatPkr(settings.withinRadiusFeePkr)}). Edit Radius & Multan location rates in the Delivery & Area Fees tab."
+                    } else {
+                        "Active Mode: Standard Base Delivery Fee (${GharTakConstants.formatPkr(settings.baseDeliveryFeePkr)}) is applied when no Area/Multan rule matches."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = GharTakEmerald,
+                    modifier = Modifier.padding(10.dp)
+                )
+            }
+        }
+        item {
             Button(
                 onClick = {
                     adminVm.saveSettings(

@@ -1273,7 +1273,14 @@ class GharTakViewModel(
             .orEmpty()
         if (cleanExplicit.isNotBlank()) {
             val explicitRule = rules.firstOrNull { it.city.trim().equals(cleanExplicit, ignoreCase = true) }
-            return (explicitRule?.city?.trim() ?: cleanExplicit) to (explicitRule?.feePkr ?: defaultFee)
+            if (explicitRule != null) {
+                return explicitRule.city.trim() to explicitRule.feePkr
+            }
+            val areaFallback = settings.deliveryAreaFeeRules.firstOrNull {
+                it.areaName.trim().equals(cleanExplicit, ignoreCase = true) ||
+                    it.areaName.substringBefore("(").trim().equals(cleanExplicit, ignoreCase = true)
+            }
+            return cleanExplicit to (areaFallback?.feePkr ?: defaultFee)
         }
 
         val lowerAddress = addressText.trim().lowercase()
@@ -1287,6 +1294,15 @@ class GharTakViewModel(
             if (addressMatchedRule != null) {
                 return addressMatchedRule.city.trim() to addressMatchedRule.feePkr
             }
+            val addressAreaMatch = settings.deliveryAreaFeeRules
+                .sortedByDescending { it.areaName.trim().length }
+                .firstOrNull { rule ->
+                    val cleanArea = rule.areaName.substringBefore("(").trim().lowercase()
+                    cleanArea.length >= 3 && lowerAddress.contains(cleanArea)
+                }
+            if (addressAreaMatch != null) {
+                return addressAreaMatch.areaName.substringBefore("(").trim() to addressAreaMatch.feePkr
+            }
         }
 
         val cleanPreferred = preferredCity.trim()
@@ -1294,7 +1310,13 @@ class GharTakViewModel(
             .orEmpty()
         if (cleanPreferred.isNotBlank()) {
             val cityRule = rules.firstOrNull { it.city.trim().equals(cleanPreferred, ignoreCase = true) }
-            return (cityRule?.city?.trim() ?: cleanPreferred) to (cityRule?.feePkr ?: defaultFee)
+            if (cityRule != null) {
+                return cityRule.city.trim() to cityRule.feePkr
+            }
+            val areaPreferred = settings.deliveryAreaFeeRules.firstOrNull {
+                it.areaName.trim().equals(cleanPreferred, ignoreCase = true)
+            }
+            return cleanPreferred to (areaPreferred?.feePkr ?: defaultFee)
         }
 
         val fallbackLoc = rules.firstOrNull()?.city?.trim()

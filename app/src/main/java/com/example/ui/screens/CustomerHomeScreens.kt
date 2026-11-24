@@ -151,6 +151,7 @@ fun CustomerHomeScreen(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val selectedCity by viewModel.selectedCity.collectAsStateWithLifecycle()
+    val selectedMultanDestination by viewModel.selectedMultanDestination.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val settings by viewModel.platformSettings.collectAsStateWithLifecycle()
     val foodCategories by viewModel.foodCategories.collectAsStateWithLifecycle()
@@ -524,10 +525,11 @@ fun CustomerHomeScreen(
                     .testTag("home_medical_card")
             )
             Spacer(Modifier.height(10.dp))
-            val activeMultanCity = if (selectedCity.equals(GharTakConstants.ALL_CITIES, ignoreCase = true)) {
-                GharTakConstants.DEFAULT_CITY
-            } else selectedCity
-            val multanFee = viewModel.resolveMultanCityDeliveryFee(activeMultanCity, settings)
+            val (activeMultanLoc, multanFee) = viewModel.resolveMultanLocationAndFee(
+                preferredCity = selectedCity,
+                explicitDestination = selectedMultanDestination,
+                settings = settings
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -536,7 +538,7 @@ fun CustomerHomeScreen(
             ) {
                 VerticalSplitCard(
                     title = "Multan Express",
-                    subtitle = "Crumble, KFC, Halwa • ${GharTakConstants.formatPkr(multanFee)} Fee",
+                    subtitle = "To $activeMultanLoc • ${GharTakConstants.formatPkr(multanFee)} Fee",
                     imageRes = "res://img_banner_deals",
                     accentColor = GtNavyHeader,
                     onClick = onOpenMultanHub,
@@ -1002,6 +1004,7 @@ fun CustomerHomeScreen(
             defaultCity = defaultReqCity,
             defaultName = userProfile?.fullName.orEmpty(),
             defaultPhone = userProfile?.phone.orEmpty(),
+            settings = settings,
             onDismiss = { parcelRiderDialogType = null },
             onSubmit = { pickup, dropoff, city, contactName, contactPhone, details, feePkr ->
                 viewModel.submitCustomerParcelRiderRequest(
@@ -1241,6 +1244,7 @@ private fun CustomerParcelRiderDialog(
     defaultCity: String,
     defaultName: String,
     defaultPhone: String,
+    settings: PlatformSettings,
     onDismiss: () -> Unit,
     onSubmit: (
         pickup: String,
@@ -1254,12 +1258,21 @@ private fun CustomerParcelRiderDialog(
 ) {
     val isParcel = requestType == "send_parcel"
     var selectedReqCity by remember(defaultCity) { mutableStateOf(defaultCity) }
+    val matchingMultanRule = settings.multanCityDeliveryFees.firstOrNull {
+        it.city.trim().equals(selectedReqCity.trim(), ignoreCase = true)
+    }
+    val suggestedCityRate = when {
+        !isParcel -> maxOf(400.0, settings.riderPayoutPkr)
+        matchingMultanRule != null -> matchingMultanRule.feePkr
+        settings.radiusPricingEnabled -> settings.withinRadiusFeePkr
+        else -> settings.baseDeliveryFeePkr
+    }.coerceAtLeast(50.0)
     var pickupAddress by remember { mutableStateOf("") }
     var dropoffAddress by remember { mutableStateOf("") }
     var contactName by remember(defaultName) { mutableStateOf(defaultName) }
     var contactPhone by remember(defaultPhone) { mutableStateOf(defaultPhone.ifBlank { "+92" }) }
     var details by remember { mutableStateOf("") }
-    var feeText by remember { mutableStateOf(if (isParcel) "180" else "400") }
+    var feeText by remember(defaultCity) { mutableStateOf(suggestedCityRate.toInt().toString()) }
 
     val feeValue = feeText.toDoubleOrNull() ?: 0.0
     val isValid = pickupAddress.trim().length >= 3 &&
@@ -1284,15 +1297,43 @@ private fun CustomerParcelRiderDialog(
                     )
                 }
                 item {
-                    Text("Approved City", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Approved City / Location", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(approvedCities) { c ->
                             FilterChip(
                                 selected = selectedReqCity.equals(c, ignoreCase = true),
-                                onClick = { selectedReqCity = c },
+                                onClick = {
+                                    selectedReqCity = c
+                                    if (isParcel) {
+                                        val cityRate = settings.multanCityDeliveryFees
+                                            .firstOrNull { it.city.trim().equals(c.trim(), ignoreCase = true) }
+                                            ?.feePkr
+                                            ?: if (settings.radiusPricingEnabled) settings.withinRadiusFeePkr else settings.baseDeliveryFeePkr
+                                        feeText = cityRate.coerceAtLeast(50.0).toInt().toString()
+                                    }
+                                },
                                 label = { Text(c) }
                             )
                         }
+                    }
+                    Surface(
+                        color = GharTakEmerald.copy(alpha = 0.09f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    ) {
+                        Text(
+                            text = if (matchingMultanRule != null) {
+                                "Admin Rate for $selectedReqCity: ${GharTakConstants.formatPkr(matchingMultanRule.feePkr)}"
+                            } else if (settings.radiusPricingEnabled) {
+                                "Admin City Radius Rate ($selectedReqCity): Up to ${settings.deliveryBaseRadiusKm.toInt()} km = ${GharTakConstants.formatPkr(settings.withinRadiusFeePkr)}"
+                            } else {
+                                "Admin Base Delivery Rate ($selectedReqCity): ${GharTakConstants.formatPkr(settings.baseDeliveryFeePkr)}"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GharTakEmerald,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(8.dp)
+                        )
                     }
                 }
                 item {
